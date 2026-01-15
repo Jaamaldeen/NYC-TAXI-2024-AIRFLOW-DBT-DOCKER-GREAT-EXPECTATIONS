@@ -1,0 +1,137 @@
+name: NYC Taxi Data Pipeline CI
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - dev
+
+env:
+  DBT_PROFILES_DIR: ./dbt/nyc_taxi
+  POSTGRES_HOST: localhost
+  POSTGRES_USER: airflow
+  POSTGRES_PASSWORD: airflow_password
+  POSTGRES_DB: airflow
+  POSTGRES_PORT: 5432
+
+jobs:
+  python_tests:
+    name: Python Unit Tests & Linting
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest apache-airflow apache-airflow-providers-postgres pandas pyarrow dbt-postgres great_expectations
+
+      - name: Lint with Flake8
+        run: |
+          flake8 dags tests --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 dags tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Run Pytest
+        env:
+          PYTHONPATH: ${{ github.workspace }}/dags
+        run: |
+          pytest tests/test_pipeline_logic.py
+
+
+  dbt_validation:
+    name: DBT Compilation & Testing
+    runs-on: ubuntu-latest
+    needs: python_tests 
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install DBT
+        run: pip install dbt-postgres
+
+      - name: Verify DBT Connection
+        run: dbt debug
+        working-directory: ./dbt/nyc_taxi
+
+      - name: Install DBT Dependencies
+        run: dbt deps
+        working-directory: ./dbt/nyc_taxi
+
+      - name: Compile DBT Models (Syntax Check)
+        run: dbt compile
+        working-directory: ./dbt/nyc_taxi
+
+      
+      - name: Seed Test Data & Run Tests
+        run: |
+          dbt seed --target ci
+          dbt run --target ci --empty 
+          dbt test --target ci
+        working-directory: ./dbt/nyc_taxi
+
+  
+  gx_smoke_test:
+    name: Great Expectations Smoke Test
+    runs-on: ubuntu-latest
+    needs: python_tests
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install GX
+        run: pip install great_expectations sqlalchemy psycopg2-binary
+
+      - name: Verify GX Config Validity
+        run: |
+          python -c "import great_expectations as gx; context = gx.get_context(); print('✅ GX Context Loaded Successfully')"
