@@ -61,7 +61,6 @@ jobs:
         run: |
           pytest tests/test_pipeline_logic.py
 
-
   dbt_validation:
     name: DBT Compilation & Testing
     runs-on: ubuntu-latest
@@ -85,7 +84,6 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -95,7 +93,7 @@ jobs:
         run: pip install dbt-postgres
 
       - name: Verify DBT Connection
-        run: dbt debug
+        run: dbt debug --target ci
         working-directory: ./dbt/nyc_taxi
 
       - name: Install DBT Dependencies
@@ -103,17 +101,17 @@ jobs:
         working-directory: ./dbt/nyc_taxi
 
       - name: Compile DBT Models (Syntax Check)
-        run: dbt compile
+        run: dbt compile --target ci
         working-directory: ./dbt/nyc_taxi
 
       - name: Seed Test Data & Run Tests
+  
         run: |
           dbt seed --target ci
           dbt run --target ci --empty 
           dbt test --target ci
         working-directory: ./dbt/nyc_taxi
 
-  
   gx_smoke_test:
     name: Great Expectations Smoke Test
     runs-on: ubuntu-latest
