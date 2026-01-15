@@ -9,7 +9,7 @@ on:
       - dev
 
 env:
-  DBT_PROFILES_DIR: ./dbt/nyc_taxi
+  DBT_PROFILES_DIR: ${{ github.workspace }}/dbt/nyc_taxi
   POSTGRES_HOST: localhost
   POSTGRES_USER: airflow
   POSTGRES_PASSWORD: airflow_password
@@ -106,7 +106,6 @@ jobs:
         run: dbt compile
         working-directory: ./dbt/nyc_taxi
 
-      
       - name: Seed Test Data & Run Tests
         run: |
           dbt seed --target ci
@@ -134,4 +133,4 @@ jobs:
 
       - name: Verify GX Config Validity
         run: |
-          python -c "import great_expectations as gx; context = gx.get_context(); print('✅ GX Context Loaded Successfully')"
+          python -c "import great_expectations as gx; context = gx.get_context(); print('GX Context Loaded Successfully')"
