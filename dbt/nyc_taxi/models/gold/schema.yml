@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: gold_daily_summary
+    columns:
+      - name: trip_date
+        tests:
+          - unique
+          - not_null
+
+  - name: gold_payment_summary
+    columns:
+      - name: payment_description
+        tests:
+          - unique

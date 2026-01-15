@@ -1,0 +1,32 @@
+version: '3'
+services:
+  airflow:
+    build: .                        
+    container_name: airflowtesting
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+      - ./dbt:/opt/airflow/dbt      
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW_CONN_POSTGRES_AIRFLOW=postgresql://airflow:airflow12@postgrest:5432/airflow_db
+    depends_on:
+      - postgres
+    command: airflow standalone 
+
+  postgres:
+    image: postgres:15
+    container_name: postgrest      
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow12
+      POSTGRES_DB: airflow_db
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+      - ./dags:/opt/airflow/dags   
+    ports:
+      - "5433:5432"

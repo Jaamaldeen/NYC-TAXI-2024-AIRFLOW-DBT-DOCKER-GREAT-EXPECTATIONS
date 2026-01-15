@@ -1,0 +1,11 @@
+*.parquet
+logs/
+*__pycache__/
+target/
+dbt_packages/
+logs/
+*.log
+pgdata/
+*.sql.backup
+.pytest_cache
+postgres_data
