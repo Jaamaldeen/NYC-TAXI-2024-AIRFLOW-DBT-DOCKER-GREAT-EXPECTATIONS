@@ -2,7 +2,6 @@ version: 2
 
 sources:
   - name: nyc_taxi
-    database: airflow_db
     schema: bronze
     tables:
       - name: yellow_tripdata
