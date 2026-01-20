@@ -7,7 +7,7 @@ from dags.nyc_taxi_pipeline import update_pipeline_success, yellow_taxi_pipeline
 
 
 dag = yellow_taxi_pipeline()
-load_task_function = dag.get_task("load_yellow_taxi_incremental").python_callable
+load_task_function = dag.get_task("load_yellow_taxi_staging").python_callable
 
 
 class TestMonthCalculation:
@@ -18,26 +18,22 @@ class TestMonthCalculation:
         mock_conn = mock_hook.get_conn.return_value
         mock_cursor = mock_conn.cursor.return_value
         
-     
         mock_cursor.fetchone.return_value = None
         mock_context = {
             'dag_run': MagicMock(run_id='test_run_1'),
             'ti': MagicMock()
         }
 
-       
         with patch("dags.nyc_taxi_pipeline.pq.ParquetFile") as mock_pq:
             mock_pq.return_value.iter_batches.return_value = [] 
             
-            
             load_task_function(**mock_context)
             
-            args, _ = mock_cursor.execute.call_args_list[1] # Index 1 is the INSERT metadata
+            args, _ = mock_cursor.execute.call_args_list[1]
             assert "2024-01" in args[0] or "2024-01" in str(args)
 
     @patch("dags.nyc_taxi_pipeline.PostgresHook")
     def test_calculate_next_month_incremental(self, mock_hook_cls):
-       
         mock_cursor = mock_hook_cls.return_value.get_conn.return_value.cursor.return_value
  
         mock_cursor.fetchone.return_value = ['2024-05']
@@ -49,11 +45,9 @@ class TestMonthCalculation:
             
             load_task_function(**mock_context)
             
-           
             insert_call = mock_cursor.execute.call_args_list[1]
-          
             sql_params = insert_call[0][1] 
-           
+            
             assert sql_params[3] == "2024-06"
             assert sql_params[4] == "2024-05"
 
@@ -62,12 +56,10 @@ class TestMetadataUpdates:
 
     @patch("dags.nyc_taxi_pipeline.PostgresHook")
     def test_update_pipeline_success(self, mock_hook_cls):
-     
         mock_hook = mock_hook_cls.return_value
         
         context = {'dag_run': MagicMock(run_id='manual__123')}
         
-
         update_pipeline_success(**context)
 
         called_sql = mock_hook.run.call_args[0][0]
@@ -77,7 +69,6 @@ class TestMetadataUpdates:
         assert called_params == ('manual__123',)
 
 
-
 class TestFailureCallback:
 
     @patch("dags.failure_callbacks.PostgresHook")
@@ -85,7 +76,6 @@ class TestFailureCallback:
     
         mock_hook = mock_hook_cls.return_value
         
-
         fake_error = ValueError("Validation crashed because of nulls!")
         
         context = {
@@ -94,10 +84,8 @@ class TestFailureCallback:
             'exception': fake_error
         }
         
-
         failure_callback_function(context)
         
-
         called_sql = mock_hook.run.call_args[0][0]
         called_params = mock_hook.run.call_args[1]['parameters']
         
@@ -107,13 +95,11 @@ class TestFailureCallback:
         assert called_params[1] == 'fail_run_999'
 
 
-
 class TestIdempotency:
 
     @patch("dags.nyc_taxi_pipeline.PostgresHook")
     def test_idempotency_delete_before_insert(self, mock_hook_cls):
         mock_cursor = mock_hook_cls.return_value.get_conn.return_value.cursor.return_value
-        
         
         mock_cursor.fetchone.return_value = ['2024-01'] 
         
@@ -122,16 +108,13 @@ class TestIdempotency:
         with patch("dags.nyc_taxi_pipeline.pq.ParquetFile") as mock_pq:
             mock_pq.return_value.iter_batches.return_value = []
             
-        
             load_task_function(**mock_context)
             
-           
             delete_called = False
             for call in mock_cursor.execute.call_args_list:
                 sql = call[0][0]
-                if "DELETE FROM bronze.yellow_tripdata" in sql:
+                if "DELETE FROM bronze.bronze_yellow_tripdata" in sql:
                     delete_called = True
-                 
                     assert call[0][1] == ('2024-02',)
             
             assert delete_called, "The code must execute a DELETE statement to ensure idempotency"
