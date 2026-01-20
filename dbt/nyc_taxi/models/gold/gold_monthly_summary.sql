@@ -16,7 +16,6 @@ SELECT
 FROM silver_data
 
 {% if is_incremental() %}
-  -- FIX: Cast the default string to TIMESTAMP so types match
   WHERE date_trunc('month', tpep_pickup_datetime) >= (
       SELECT COALESCE(MAX(revenue_month), '1900-01-01'::timestamp) FROM {{ this }}
   )

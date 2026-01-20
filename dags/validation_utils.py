@@ -1,6 +1,6 @@
 import great_expectations as gx
 import great_expectations.expectations as gxe
-from great_expectations.exceptions import DataContextError  # <--- Essential Import
+from great_expectations.exceptions import DataContextError  
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from utils.logger import get_logger
 
@@ -8,7 +8,6 @@ from utils.logger import get_logger
 logger = get_logger("validation_utils")
 
 def get_connection_string(conn_id="postgres_airflow"):
-   
     hook = PostgresHook(postgres_conn_id=conn_id)
     conn = hook.get_connection(conn_id)
     return f"postgresql+psycopg2://{conn.login}:{conn.password}@{conn.host}:{conn.port}/{conn.schema}"
@@ -49,9 +48,7 @@ def run_validation(layer_name, table_name, suite_name, expectations):
 
         
         try:
-         
             suite = context.suites.get(suite_name)
-            
             suite.expectations = [] 
         except (KeyError, ValueError, DataContextError):
             logger.info(f"Suite '{suite_name}' not found. Creating it...")
@@ -108,7 +105,8 @@ def validate_bronze_layer(**kwargs):
     
     expectations.append(gxe.ExpectColumnValuesToNotBeNull(column="tpep_pickup_datetime", mostly=0.99))
 
-    run_validation("bronze", "yellow_tripdata", "bronze_schema_suite", expectations)
+
+    run_validation("bronze", "bronze_yellow_tripdata", "bronze_schema_suite", expectations)
 
 def validate_silver_layer(**kwargs):
     expectations = [

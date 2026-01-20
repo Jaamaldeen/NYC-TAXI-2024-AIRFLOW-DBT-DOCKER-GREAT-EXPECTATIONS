@@ -5,8 +5,7 @@
 ) }}
 
 WITH source_data AS (
-    SELECT * FROM {{ source('nyc_taxi', 'yellow_tripdata') }}
-    
+    SELECT * FROM {{ ref('bronze_yellow_tripdata') }}
     {% if is_incremental() %}
     WHERE tpep_pickup_datetime > (SELECT MAX(tpep_pickup_datetime) FROM {{ this }})
     {% endif %}
@@ -17,8 +16,7 @@ transformed AS (
         vendorid, ratecodeid, payment_type, pulocationid, dolocationid,
         store_and_fwd_flag, passenger_count, trip_distance,
         tpep_pickup_datetime, tpep_dropoff_datetime,
-
-        -- 1. MAPPINGS
+        
         CASE vendorid 
             WHEN 1 THEN 'Creative Mobile Technologies, LLC' 
             WHEN 2 THEN 'Curb Mobility, LLC' 
@@ -48,10 +46,9 @@ transformed AS (
             ELSE 'Unknown' 
         END AS payment_description,
 
-        -- 2. DURATION CALCULATION
+       
         ROUND(CAST(EXTRACT(EPOCH FROM (tpep_dropoff_datetime - tpep_pickup_datetime)) / 60 AS numeric), 2) AS trip_duration_minutes,
 
-        -- 3. ABSOLUTE VALUES (Fixes negative money issues)
         ABS(COALESCE(fare_amount, 0)) AS fare_amount,
         ABS(COALESCE(extra, 0)) AS extra,
         ABS(COALESCE(mta_tax, 0)) AS mta_tax,
@@ -62,7 +59,7 @@ transformed AS (
         ABS(COALESCE(airport_fee, 0)) AS airport_fee
 
     FROM source_data
-    -- CRITICAL FIX: Filter out invalid payment types so GX passes
+    
     WHERE payment_type IN (1, 2, 3, 4, 5, 6)
 ),
 
@@ -71,7 +68,7 @@ final_calculations AS (
         *,
         (fare_amount + extra + mta_tax + tip_amount + tolls_amount + improvement_surcharge + congestion_surcharge + airport_fee) AS total_amount,
 
-        -- ROBUST ID GENERATION (Fixes NULLs)
+       
         md5(
             COALESCE(CAST(vendorid AS VARCHAR), '-1') || 
             COALESCE(CAST(tpep_pickup_datetime AS VARCHAR), '1900-01-01') || 
@@ -84,7 +81,7 @@ final_calculations AS (
     FROM transformed
 )
 
--- DEDUPLICATION
+
 SELECT DISTINCT ON (unique_trip_id) *
 FROM final_calculations
 ORDER BY unique_trip_id, tpep_pickup_datetime

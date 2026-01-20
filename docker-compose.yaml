@@ -14,6 +14,7 @@ services:
     environment:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW_CONN_POSTGRES_AIRFLOW=postgresql://airflow:airflow12@postgrest:5432/airflow_db
+      - AIRFLOW_VAR_SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
     depends_on:
       - postgres
     command: airflow standalone 
