@@ -115,6 +115,6 @@ class TestIdempotency:
                 sql = call[0][0]
                 if "DELETE FROM bronze.bronze_yellow_tripdata" in sql:
                     delete_called = True
-                    assert call[0][1] == ('2024-02',)
+                    assert call[0][1] == ('2024-02%',)
             
             assert delete_called, "The code must execute a DELETE statement to ensure idempotency"
