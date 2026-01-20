@@ -3,14 +3,12 @@ import io
 import pandas as pd
 import pyarrow.parquet as pq
 from dateutil.relativedelta import relativedelta
-
 from airflow.sdk import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
-
 from validation_utils import validate_bronze_layer, validate_silver_layer, validate_gold_layer
 from failure_callbacks import failure_callback_function
 from utils.logger import get_logger
@@ -103,7 +101,6 @@ def yellow_taxi_pipeline():
         cur = conn.cursor()
 
         try:
-            
             cur.execute("SELECT MAX(target_month) FROM metadata.pipeline_metadata WHERE pipeline_name=%s AND status='SUCCESS';", (pipeline_name,))
             row = cur.fetchone()
             last_successful_month = row[0] if row and row[0] else None
@@ -116,9 +113,9 @@ def yellow_taxi_pipeline():
             target_month = next_month_dt.strftime("%Y-%m")
             file_path = f"/opt/airflow/data/yellow_tripdata_{target_month}.parquet"
             
-            logger.info(f"Loading target month: {target_month} into STAGING from {file_path}")
+            logger.info(f"Loading target month: {target_month} into BRONZE from {file_path}")
 
-    
+           
             cur.execute("""
                 INSERT INTO metadata.pipeline_metadata (pipeline_name, run_id, load_type, target_month, last_successful_month, status) 
                 VALUES (%s, %s, %s, %s, %s, 'RUNNING')
@@ -126,12 +123,18 @@ def yellow_taxi_pipeline():
             """, (pipeline_name, run_id, "INCREMENTAL", target_month, last_successful_month))
             conn.commit()
 
+        
+            logger.info(f"Cleaning up old data for {target_month}...")
+            cur.execute(
+                "DELETE FROM bronze.bronze_yellow_tripdata WHERE tpep_pickup_datetime::text LIKE %s", 
+                (f"{target_month}%",)
+            )
+            conn.commit()
             
+          
             parquet_file = pq.ParquetFile(file_path)
+            
             int_cols = ["vendorid", "passenger_count", "ratecodeid", "pulocationid", "dolocationid", "payment_type"]
-            
-            
-            cur.execute("TRUNCATE TABLE staging.yellow_tripdata_raw;")
             
             batch_count = 0
             for batch in parquet_file.iter_batches(batch_size=100_000):
@@ -143,27 +146,29 @@ def yellow_taxi_pipeline():
                 for col in int_cols:
                     if col in df.columns:
                         df[col] = pd.to_numeric(df[col], errors='coerce').astype("Int64")
-              
+                
+                
                 buffer = io.StringIO()
                 df.to_csv(buffer, index=False, header=False, na_rep='\\N')
                 buffer.seek(0)
-                cur.copy_expert("COPY staging.yellow_tripdata_raw FROM STDIN WITH CSV NULL '\\N';", buffer)
+                
+
+                cur.copy_expert("COPY bronze.bronze_yellow_tripdata FROM STDIN WITH CSV NULL '\\N';", buffer)
                 batch_count += 1
             
-            logger.info(f"✅ Successfully loaded {batch_count} batches into STAGING for {target_month}")
+            logger.info(f"Successfully loaded {batch_count} batches into BRONZE for {target_month}")
             conn.commit()
-            
             
             return target_month
 
         except Exception as e:
-            logger.error(f"Staging Load Failed: {e}")
+            logger.error(f"Bronze Load Failed: {e}")
+            conn.rollback() 
             raise e
         finally:
             cur.close()
             conn.close()
 
-   
     load_staging_task = load_yellow_taxi_staging()
 
     
