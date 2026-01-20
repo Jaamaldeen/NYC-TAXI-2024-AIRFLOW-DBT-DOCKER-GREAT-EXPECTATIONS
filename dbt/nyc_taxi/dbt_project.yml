@@ -36,7 +36,8 @@ models:
       +materialized: table
 
 seeds:
-  nyc_taxi:
-    yellow_tripdata:
-      +enabled: true
-      +schema: bronze
+  nyc_taxi:              
+    mock_yellow_tripdata: 
+      +schema: staging    
+      +alias: yellow_tripdata_raw  
+      +enabled: "{{ target.name == 'ci' }}"
