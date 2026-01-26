@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: bronze_yellow_tripdata  
+    description: "loading from staging table."
+    columns:
+      - name: vendorid
+        description: "Code indicating the LPEP provider."
+        tests:
+          - not_null
+
+      - name: tpep_pickup_datetime
+        description: "The date and time when the meter was engaged."
+        tests:
+          - not_null
+
+      - name: tpep_dropoff_datetime
+        description: "The date and time when the meter was disengaged."
+        tests:
+          - not_null

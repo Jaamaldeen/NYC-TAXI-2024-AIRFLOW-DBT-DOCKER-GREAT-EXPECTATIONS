@@ -23,6 +23,6 @@ models:
       - name: vendorid
         tests:
           - relationships:
-              to: source('nyc_taxi', 'yellow_tripdata')
+              to: ref('bronze_yellow_tripdata')
               field: VendorID
              

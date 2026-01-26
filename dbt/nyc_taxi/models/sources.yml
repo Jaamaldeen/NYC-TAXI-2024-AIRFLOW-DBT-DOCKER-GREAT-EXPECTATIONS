@@ -1,7 +1,7 @@
 version: 2
 
 sources:
-  - name: nyc_taxi
-    schema: bronze
+  - name: staging
+    schema: staging
     tables:
-      - name: yellow_tripdata
+      - name: yellow_tripdata_raw
