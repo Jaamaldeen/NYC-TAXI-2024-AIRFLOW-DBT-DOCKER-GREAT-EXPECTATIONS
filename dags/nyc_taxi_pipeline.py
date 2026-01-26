@@ -64,6 +64,7 @@ def yellow_taxi_pipeline():
         """
     )
 
+    
     create_staging_table = SQLExecuteQueryOperator(
         task_id="create_staging_table",
         conn_id=CONN_ID,
@@ -79,6 +80,7 @@ def yellow_taxi_pipeline():
         """
     )
 
+    
     create_metadata_table = SQLExecuteQueryOperator(
         task_id="create_metadata_table",
         conn_id=CONN_ID,
@@ -101,6 +103,7 @@ def yellow_taxi_pipeline():
         cur = conn.cursor()
 
         try:
+         
             cur.execute("SELECT MAX(target_month) FROM metadata.pipeline_metadata WHERE pipeline_name=%s AND status='SUCCESS';", (pipeline_name,))
             row = cur.fetchone()
             last_successful_month = row[0] if row and row[0] else None
@@ -113,7 +116,7 @@ def yellow_taxi_pipeline():
             target_month = next_month_dt.strftime("%Y-%m")
             file_path = f"/opt/airflow/data/yellow_tripdata_{target_month}.parquet"
             
-            logger.info(f"Loading target month: {target_month} into BRONZE from {file_path}")
+            logger.info(f"Loading target month: {target_month} into STAGING from {file_path}")
 
            
             cur.execute("""
@@ -123,17 +126,16 @@ def yellow_taxi_pipeline():
             """, (pipeline_name, run_id, "INCREMENTAL", target_month, last_successful_month))
             conn.commit()
 
-        
-            logger.info(f"Cleaning up old data for {target_month}...")
+           
+            logger.info(f"Cleaning up old data for {target_month} in STAGING...")
             cur.execute(
-                "DELETE FROM bronze.bronze_yellow_tripdata WHERE tpep_pickup_datetime::text LIKE %s", 
+                "DELETE FROM staging.yellow_tripdata_raw WHERE tpep_pickup_datetime::text LIKE %s", 
                 (f"{target_month}%",)
             )
             conn.commit()
             
-          
-            parquet_file = pq.ParquetFile(file_path)
             
+            parquet_file = pq.ParquetFile(file_path)
             int_cols = ["vendorid", "passenger_count", "ratecodeid", "pulocationid", "dolocationid", "payment_type"]
             
             batch_count = 0
@@ -147,22 +149,20 @@ def yellow_taxi_pipeline():
                     if col in df.columns:
                         df[col] = pd.to_numeric(df[col], errors='coerce').astype("Int64")
                 
-                
                 buffer = io.StringIO()
                 df.to_csv(buffer, index=False, header=False, na_rep='\\N')
                 buffer.seek(0)
                 
-
-                cur.copy_expert("COPY bronze.bronze_yellow_tripdata FROM STDIN WITH CSV NULL '\\N';", buffer)
+                cur.copy_expert("COPY staging.yellow_tripdata_raw FROM STDIN WITH CSV NULL '\\N';", buffer)
                 batch_count += 1
             
-            logger.info(f"Successfully loaded {batch_count} batches into BRONZE for {target_month}")
+            logger.info(f"✅ Successfully loaded {batch_count} batches into STAGING for {target_month}")
             conn.commit()
             
             return target_month
 
         except Exception as e:
-            logger.error(f"Bronze Load Failed: {e}")
+            logger.error(f"Staging Load Failed: {e}")
             conn.rollback() 
             raise e
         finally:
@@ -171,13 +171,12 @@ def yellow_taxi_pipeline():
 
     load_staging_task = load_yellow_taxi_staging()
 
-    
+
     dbt_env = {
         "DBT_PROFILES_DIR": DBT_PROJECT_DIR, 
         "PATH": "/home/airflow/.local/bin:/usr/local/bin:/usr/bin:/bin"
     }
-    
-    
+
     dbt_bronze_run = BashOperator(
         task_id="dbt_bronze_run",
         bash_command=f"""
@@ -186,7 +185,6 @@ def yellow_taxi_pipeline():
         """,
         env=dbt_env
     )
-    
     
     dbt_bronze_test = BashOperator(
         task_id="dbt_bronze_test",
@@ -197,7 +195,7 @@ def yellow_taxi_pipeline():
         env=dbt_env
     )
 
-    
+
     validate_bronze_task = PythonOperator(task_id="validate_bronze_quality", python_callable=validate_bronze_layer)
     validate_silver_task = PythonOperator(task_id="validate_silver_quality", python_callable=validate_silver_layer)
     validate_gold_task = PythonOperator(task_id="validate_gold_quality", python_callable=validate_gold_layer)
@@ -213,6 +211,7 @@ def yellow_taxi_pipeline():
         bash_command=f"cd {DBT_PROJECT_DIR} && {DBT_EXECUTABLE} test --select silver", 
         env=dbt_env
     )
+    
     
     dbt_gold_run = BashOperator(
         task_id="dbt_gold_run", 
@@ -232,16 +231,14 @@ def yellow_taxi_pipeline():
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
 
-    
     create_schemas >> [create_staging_table, create_metadata_table] >> load_staging_task
     
-   
     load_staging_task >> dbt_bronze_run >> dbt_bronze_test >> validate_bronze_task
     
-   
     validate_bronze_task >> dbt_silver_run >> dbt_silver_test >> validate_silver_task
     
     validate_silver_task >> dbt_gold_run >> dbt_gold_test >> validate_gold_task
+    
     validate_gold_task >> finalize_success
 
 yellow_taxi_pipeline()

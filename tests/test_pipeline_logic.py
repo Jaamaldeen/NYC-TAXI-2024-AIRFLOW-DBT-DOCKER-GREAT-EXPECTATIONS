@@ -113,8 +113,8 @@ class TestIdempotency:
             delete_called = False
             for call in mock_cursor.execute.call_args_list:
                 sql = call[0][0]
-                if "DELETE FROM bronze.bronze_yellow_tripdata" in sql:
+                if "DELETE FROM staging.yellow_tripdata_raw" in sql: 
                     delete_called = True
                     assert call[0][1] == ('2024-02%',)
             
-            assert delete_called, "The code must execute a DELETE statement to ensure idempotency"
+            assert delete_called, "The code must execute a DELETE on Staging to ensure idempotency"
