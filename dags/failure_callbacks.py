@@ -1,5 +1,5 @@
 import json
-import urllib.request # <--- Standard library, no pip install needed
+import urllib.request 
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
 from utils.logger import get_logger
